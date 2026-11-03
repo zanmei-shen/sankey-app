@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SEC EDGAR Financial Explorer</title>
+  <style>
+    :root {
+      --blue:       #0066cc;
+      --blue-dark:  #004fa3;
+      --blue-light: #e8f0fb;
+      --gray-50:    #f8fafc;
+      --gray-100:   #f1f5f9;
+      --gray-200:   #e2e8f0;
+      --gray-400:   #94a3b8;
+      --gray-600:   #475569;
+      --gray-900:   #0f172a;
+      --red:        #dc2626;
+      --red-light:  #fef2f2;
+      --radius:     8px;
+      --shadow:     0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-900);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: var(--blue);
+      color: #fff;
+      padding: 1.75rem 1.5rem;
+      text-align: center;
+    }
+    .header h1 { font-size: 1.65rem; font-weight: 700; margin-bottom: .3rem; }
+    .header p  { opacity: .85; font-size: .92rem; }
+
+    /* ── Layout ── */
+    .main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; flex: 1; width: 100%; }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 1.25rem;
+      padding: 1.5rem;
+    }
+
+    /* ── Search form ── */
+    .form-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: flex-end;
+    }
+    .form-group { display: flex; flex-direction: column; gap: .35rem; flex: 1 1 160px; }
+    .form-group--btn { flex: 0 0 auto; }
+
+    label {
+      font-size: .75rem;
+      font-weight: 700;
+      color: var(--gray-600);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+      padding: .55rem .75rem;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      font-size: .95rem;
+      color: var(--gray-900);
+      background: #fff;
+      width: 100%;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      padding: .58rem 1.2rem;
+      border-radius: var(--radius);
+      font-size: .875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1.5px solid transparent;
+      transition: background .15s, border-color .15s, opacity .15s;
+      white-space: nowrap;
+      line-height: 1.4;
+    }
+    .btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .btn-primary:hover:not(:disabled) { background: var(--blue-dark); border-color: var(--blue-dark); }
+    .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+    .btn-outline { background: #fff; color: var(--blue); border-color: var(--blue); }
+    .btn-outline:hover { background: var(--blue-light); }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn-spinner {
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .65s linear infinite;
+      flex-shrink: 0;
+    }
+
+    .page-spinner {
+      width: 38px; height: 38px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    /* ── Loading ── */
+    .loading { text-align: center; padding: 3rem 1.5rem; color: var(--gray-600); }
+    .loading .sub { font-size: .83rem; color: var(--gray-400); margin-top: .25rem; }
+
+    /* ── Error ── */
+    .error-box {
+      background: var(--red-light);
+      border: 1px solid #fecaca;
+      border-radius: var(--radius);
+      color: var(--red);
+      padding: .9rem 1.1rem;
+      margin-bottom: 1.25rem;
+      font-size: .875rem;
+    }
+
+    /* ── Summary ── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: .9rem 1.25rem;
+    }
+    .summary-item { display: flex; flex-direction: column; gap: .15rem; }
+    .summary-label {
+      font-size: .7rem;
+      font-weight: 700;
+      color: var(--gray-400);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .summary-value { font-size: .92rem; font-weight: 600; word-break: break-word; }
+
+    /* ── Results header ── */
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: .75rem;
+      margin-bottom: 1rem;
+    }
+    .results-header h2 { font-size: 1rem; font-weight: 700; }
+    .results-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+
+    /* ── Segment filter pills ── */
+    .seg-pills { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .seg-pill {
+      padding: .25rem .65rem;
+      border-radius: 999px;
+      border: 1.5px solid var(--gray-200);
+      background: #fff;
+      font-size: .78rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--gray-600);
+      transition: all .15s;
+    }
+    .seg-pill.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .seg-pill:hover:not(.active) { border-color: var(--blue); color: var(--blue); }
+
+    /* ── Table ── */
+    .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; font-size: .855rem; }
+    thead th {
+      text-align: left;
+      padding: .55rem .8rem;
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: var(--gray-600);
+      background: var(--gray-50);
+      border-bottom: 2px solid var(--gray-200);
+      white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid var(--gray-100); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--gray-50); }
+    tbody td { padding: .6rem .8rem; vertical-align: middle; }
+
+    .td-seg-cons { font-weight: 700; }
+    .td-seg-part { color: var(--gray-600); }
+    .td-value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: .875rem; }
+    .align-right { text-align: right !important; }
+
+    .form-badge {
+      display: inline-block;
+      padding: .12rem .4rem;
+      border-radius: 4px;
+      background: var(--blue-light);
+      color: var(--blue);
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+    }
+
+    .td-empty {
+      text-align: center;
+      color: var(--gray-400);
+      padding: 2.5rem !important;
+      font-size: .875rem;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      text-align: center;
+      padding: 1.25rem;
+      color: var(--gray-400);
+      font-size: .78rem;
+      border-top: 1px solid var(--gray-200);
+      background: #fff;
+    }
+    .footer a { color: var(--blue); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    .hidden { display: none !important; }
+
+    /* ── Sankey ── */
+    .card-title { font-size: 1rem; font-weight: 700; margin-bottom: .2rem; }
+    .card-sub { font-size: .83rem; color: var(--gray-600); margin-bottom: 1rem; }
+    select {
+      padding: .55rem .75rem;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      font-size: .95rem;
+      color: var(--gray-900);
+      background: #fff;
+      width: 100%;
+    }
+    select:focus {
+      outline: none;
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(0,102,204,.15);
+    }
+    .sankey-out { margin-top: 1.25rem; }
+    .check { display: flex; align-items: center; gap: .45rem; font-size: .875rem; font-weight: 600; color: var(--gray-600); text-transform: none; letter-spacing: 0; padding: .6rem 0; cursor: pointer; white-space: nowrap; }
+    .check input { width: auto; accent-color: var(--blue); }
+    .check.disabled { opacity: .45; cursor: not-allowed; }
+    .sankey-stage { border: 1px solid var(--gray-200); border-radius: var(--radius); background: #fff; overflow: hidden; }
+    .sankey-stage svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+    .sankey-hint { font-size: .78rem; color: var(--gray-400); margin-top: .5rem; }
+    .sankey-actions { display: flex; gap: .6rem; margin-top: .75rem; flex-wrap: wrap; }
+    .sankey-loading { text-align: center; padding: 2rem 1rem 0; color: var(--gray-600); font-size: .9rem; }
+
+    /* ── Color wheel popover ── */
+    .cp {
+      position: fixed; z-index: 60; width: 232px; outline: none;
+      background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius);
+      box-shadow: 0 10px 30px rgba(15,23,42,.22); padding: .8rem;
+      display: flex; flex-direction: column; gap: .65rem;
+    }
+    .cp-title { font-size: .8rem; font-weight: 700; color: var(--gray-600); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cp canvas { width: 168px; height: 168px; align-self: center; touch-action: none; cursor: crosshair; }
+    .cp input[type="range"] { width: 100%; accent-color: var(--blue); }
+    .cp-row { display: flex; gap: .5rem; align-items: center; }
+    .cp-swatch { flex: none; width: 34px; height: 34px; border-radius: 6px; border: 1px solid rgba(0,0,0,.18); }
+    .cp .cp-hex { font-family: Consolas, Menlo, monospace; text-transform: uppercase; }
+    .cp-presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: .35rem; }
+    .cp-preset { aspect-ratio: 1; border-radius: 6px; border: 1px solid rgba(0,0,0,.18); cursor: pointer; padding: 0; }
+    .cp-preset:hover { transform: scale(1.08); }
+    .cp-preset:focus-visible, .cp canvas:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .cp-actions { display: flex; justify-content: space-between; gap: .5rem; }
+    .cp-actions .btn { padding: .4rem .85rem; font-size: .8rem; }
+
+    /* ── Ticker suggestions ── */
+    .suggest { position: relative; }
+    .suggest-list {
+      position: absolute; z-index: 30; left: 0; top: calc(100% + 4px);
+      min-width: 100%; width: max-content; max-width: min(480px, 92vw);
+      list-style: none; background: #fff; border: 1px solid var(--gray-200);
+      border-radius: var(--radius); box-shadow: 0 8px 24px rgba(15,23,42,.14);
+      padding: .25rem; max-height: 340px; overflow-y: auto;
+    }
+    .suggest-item {
+      display: flex; align-items: baseline; gap: .7rem;
+      padding: .45rem .6rem; border-radius: 6px; cursor: pointer; font-size: .9rem;
+    }
+    .suggest-item.active { background: var(--blue-light); }
+    .suggest-tk { flex: 0 0 4.8rem; font-weight: 700; color: var(--blue-dark); white-space: nowrap; }
+    .suggest-nm { color: var(--gray-600); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .suggest-item mark { background: transparent; color: var(--gray-900); text-decoration: underline; text-underline-offset: 2px; }
+    .suggest-empty { padding: .65rem .6rem; color: var(--gray-400); font-size: .85rem; }
+
+    @media (max-width: 600px) {
+      .header h1 { font-size: 1.3rem; }
+      .card { padding: 1rem; }
+      .results-header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <h1>SEC EDGAR Financial Explorer</h1>
+    <p>Annual revenue for any US-listed company, sourced from SEC EDGAR XBRL filings</p>
+  </header>
+
+  <main class="main">
+
+    <!-- Search form -->
+    <div class="card">
+      <form id="searchForm" novalidate>
+        <div class="form-row">
+
+          <div class="form-group suggest" style="flex: 1 1 260px">
+            <label for="ticker">Ticker or Company</label>
+            <input
+              type="text" id="ticker"
+              placeholder="Type a ticker or company, e.g. TSLA, Tesla"
+              required maxlength="40" autocomplete="off" spellcheck="false"
+            />
+          </div>
+
+          <div class="form-group" style="flex: 0 1 130px">
+            <label for="startYear">Start Year</label>
+            <input
+              type="number" id="startYear"
+              min="1993" max="{{ current_year }}"
+              value="{{ current_year - 5 }}" required
+            />
+          </div>
+
+          <div class="form-group" style="flex: 0 1 130px">
+            <label for="endYear">End Year</label>
+            <input
+              type="number" id="endYear"
+              min="1993" max="{{ current_year }}"
+              value="{{ current_year - 1 }}" required
+            />
+          </div>
+
+          <div class="form-group form-group--btn">
+            <button type="submit" id="fetchBtn" class="btn btn-primary">
+              <span class="btn-text">Fetch Data</span>
+              <span class="btn-spinner hidden"></span>
+            </button>
+          </div>
+
+        </div>
+      </form>
+    </div>
+
+    <!-- Sankey -->
+    <div class="card">
+      <h2 class="card-title">Sankey diagram</h2>
+      <p class="card-sub">Income statement flow or revenue by segment for one fiscal year and period.</p>
+      <form id="sankeyForm" novalidate>
+        <div class="form-row">
+
+          <div class="form-group suggest" style="flex: 1 1 230px">
+            <label for="skTicker">Ticker or Company</label>
+            <input
+              type="text" id="skTicker" placeholder="e.g. AMZN or Amazon"
+              required maxlength="40" autocomplete="off" spellcheck="false"
+            />
+          </div>
+
+          <div class="form-group" style="flex: 1 1 190px">
+            <label for="skMode">Chart</label>
+            <select id="skMode">
+              <option value="income">Income statement</option>
+              <option value="segments">Revenue by segment</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="flex: 0 1 120px">
+            <label for="skYear">Fiscal Year</label>
+            <input
+              type="number" id="skYear"
+              min="1993" max="{{ current_year }}"
+              value="{{ current_year }}" required
+            />
+          </div>
+
+          <div class="form-group" style="flex: 0 1 110px">
+            <label for="skPeriod">Period</label>
+            <select id="skPeriod">
+              <option value="FY">FY</option>
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+              <option value="Q3">Q3</option>
+              <option value="Q4">Q4</option>
+            </select>
+          </div>
+
+          <div class="form-group form-group--btn">
+            <label class="check" id="skCatWrap">
+              <input type="checkbox" id="skCats" checked />
+              <span>Revenue categories</span>
+            </label>
+          </div>
+
+          <div class="form-group form-group--btn">
+            <button type="submit" id="skBtn" class="btn btn-primary">
+              <span class="btn-text">Generate</span>
+              <span class="btn-spinner hidden"></span>
+            </button>
+          </div>
+
+        </div>
+      </form>
+
+      <div id="skError" class="error-box hidden" role="alert" style="margin: 1rem 0 0"></div>
+      <div id="skLoading" class="sankey-loading hidden" aria-live="polite">Building diagram from SEC filings…</div>
+
+      <div id="skOut" class="sankey-out hidden">
+        <div id="skStage" class="sankey-stage" role="img" aria-label="Sankey diagram"></div>
+        <p class="sankey-hint">Drag a node to move it. Click a node to change its color. Downloads keep your changes.</p>
+        <div class="sankey-actions">
+          <button id="skSvg" type="button" class="btn btn-outline">↓ Download SVG</button>
+          <button id="skPng" type="button" class="btn btn-outline">↓ Download PNG</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="errorBox" class="error-box hidden" role="alert"></div>
+
+    <!-- Page-level loading -->
+    <div id="loading" class="loading hidden" aria-live="polite">
+      <div class="page-spinner"></div>
+      <p>Fetching from SEC EDGAR…</p>
+      <p class="sub">This may take several seconds on first lookup</p>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden">
+
+      <!-- Summary card -->
+      <div class="card">
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span class="summary-label">Company</span>
+            <span class="summary-value" id="sCompany">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Ticker</span>
+            <span class="summary-value" id="sTicker">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">CIK</span>
+            <span class="summary-value" id="sCIK">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Revenue Concept</span>
+            <span class="summary-value" id="sConcept">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Segments</span>
+            <span class="summary-value" id="sSegments">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Records</span>
+            <span class="summary-value" id="sRows">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data table card -->
+      <div class="card">
+        <div class="results-header">
+          <h2>Annual Revenue</h2>
+          <div class="results-actions">
+            <div class="seg-pills" id="segPills"></div>
+            <button id="downloadBtn" type="button" class="btn btn-outline">↓ Download CSV</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Segment</th>
+                <th>Fiscal Year</th>
+                <th>Period End</th>
+                <th class="align-right">Revenue</th>
+                <th>Form</th>
+                <th>Filed</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /results -->
+
+  </main>
+
+  <footer class="footer">
+    Data sourced from
+    <a href="https://www.sec.gov/developer" target="_blank" rel="noopener noreferrer">SEC EDGAR XBRL API</a>
+    &nbsp;·&nbsp; Annual 10-K filings only &nbsp;·&nbsp; Segment data is best-effort
+  </footer>
+
+  <script>
+    'use strict';
+
+    // ── State ───────────────────────────────────────────────────────────────────
+    let allRows = [];
+    let activeSeg = 'All';
+    let lastParams = null;
+
+    // ── Helpers ─────────────────────────────────────────────────────────────────
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function fmtRevenue(val) {
+      if (val == null || val === '') return '—';
+      const n = Number(val);
+      if (isNaN(n)) return '—';
+      const abs = Math.abs(n);
+      if (abs >= 1e12) return '$' + (n / 1e12).toFixed(2) + ' T';
+      if (abs >= 1e9)  return '$' + (n / 1e9).toFixed(2) + ' B';
+      if (abs >= 1e6)  return '$' + (n / 1e6).toFixed(2) + ' M';
+      return '$' + n.toLocaleString();
+    }
+
+    // ── UI state management ─────────────────────────────────────────────────────
+    function setLoading(on) {
+      const btn     = document.getElementById('fetchBtn');
+      const spinner = btn.querySelector('.btn-spinner');
+      const text    = btn.querySelector('.btn-text');
+      btn.disabled  = on;
+      spinner.classList.toggle('hidden', !on);
+      text.textContent = on ? 'Fetching…' : 'Fetch Data';
+      document.getElementById('loading').classList.toggle('hidden', !on);
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('errorBox');
+      box.textContent = '⚠ ' + msg;
+      box.classList.remove('hidden');
+      document.getElementById('results').classList.add('hidden');
+    }
+
+    function clearError() {
+      document.getElementById('errorBox').classList.add('hidden');
+    }
+
+    // ── Segment filter pills ────────────────────────────────────────────────────
+    function renderPills(rows) {
+      const segs = ['All', ...new Set(rows.map(r => r.segment).filter(Boolean))];
+      const container = document.getElementById('segPills');
+      container.innerHTML = '';
+      segs.forEach(seg => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'seg-pill' + (seg === activeSeg ? ' active' : '');
+        btn.textContent = seg;
+        btn.addEventListener('click', () => {
+          activeSeg = seg;
+          renderPills(allRows);
+          renderTable();
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    // ── Table render ────────────────────────────────────────────────────────────
+    function renderTable() {
+      const tbody  = document.getElementById('tableBody');
+      const rows   = activeSeg === 'All'
+        ? allRows
+        : allRows.filter(r => r.segment === activeSeg);
+
+      tbody.innerHTML = '';
+
+      if (!rows.length) {
+        tbody.innerHTML =
+          '<tr><td colspan="6" class="td-empty">No records for this filter.</td></tr>';
+        return;
+      }
+
+      rows.forEach(r => {
+        const isCons = r.segment === 'Consolidated';
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          `<td class="${isCons ? 'td-seg-cons' : 'td-seg-part'}">${esc(r.segment)}</td>` +
+          `<td>${esc(r.fiscal_year)}</td>` +
+          `<td>${r.period_end ? String(r.period_end).slice(0, 10) : '—'}</td>` +
+          `<td class="td-value">${fmtRevenue(r.value)}</td>` +
+          `<td><span class="form-badge">${esc(r.form)}</span></td>` +
+          `<td>${esc(r.filed)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ── Show results ────────────────────────────────────────────────────────────
+    function showResults(data) {
+      document.getElementById('sCompany').textContent  = data.company;
+      document.getElementById('sTicker').textContent   = data.ticker;
+      document.getElementById('sCIK').textContent      = data.cik;
+      document.getElementById('sConcept').textContent  = data.concept_used || '—';
+      document.getElementById('sSegments').textContent =
+        data.segments_found.length
+          ? data.segments_found.join(', ')
+          : 'None (v2 scope)';
+      document.getElementById('sRows').textContent = data.row_count;
+
+      allRows = data.rows;
+      activeSeg = 'All';
+      renderPills(allRows);
+      renderTable();
+      document.getElementById('results').classList.remove('hidden');
+    }
+
+    // ── Form submit ─────────────────────────────────────────────────────────────
+    document.getElementById('searchForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      clearError();
+
+      const ticker    = await resolveTicker(document.getElementById('ticker'));
+      const startYear = parseInt(document.getElementById('startYear').value, 10);
+      const endYear   = parseInt(document.getElementById('endYear').value, 10);
+
+      if (!ticker) { showError('Please enter a ticker symbol.'); return; }
+      if (isNaN(startYear) || isNaN(endYear)) { showError('Please enter valid years.'); return; }
+      if (startYear > endYear) { showError('Start year must be ≤ end year.'); return; }
+
+      lastParams = { ticker, startYear, endYear };
+      setLoading(true);
+
+      try {
+        const url  = `/api/fetch?ticker=${encodeURIComponent(ticker)}&start_year=${startYear}&end_year=${endYear}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          showError(data.detail ?? `HTTP ${resp.status} — unexpected error.`);
+          return;
+        }
+        showResults(data);
+      } catch (err) {
+        showError('Network error: ' + err.message);
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    // ── CSV download ────────────────────────────────────────────────────────────
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      if (!lastParams) return;
+      const { ticker, startYear, endYear } = lastParams;
+      const url = `/api/download?ticker=${encodeURIComponent(ticker)}&start_year=${startYear}&end_year=${endYear}`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+    // ── Sankey ──────────────────────────────────────────────────────────────────
+    let skName = 'sankey';
+    let skAbort = null;
+
+    // ── Color wheel popover ──
+    // Hue = angle, saturation = distance from the centre; the slider sets brightness.
+    const CP = (() => {
+      const SIZE = 168;
+      const PRESETS = ['#3b6fd6', '#2f9e63', '#79c69a', '#e0605a', '#ec8f89', '#b3261e',
+                       '#f58518', '#eeca3b', '#b279a2', '#72b7b2', '#4c78a8', '#9aa5b1'];
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const W = Math.round(SIZE * dpr);
+      const R = W / 2;
+      const state = { h: 0, s: 0, v: 1 };
+      let pop, canvas, ctx, slider, hexIn, swatch, titleEl, wheel = null, wheelV = -1, target = null;
+
+      function hsv2rgb(h, s, v) {
+        const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+        return [f(5), f(3), f(1)].map(x => Math.round(x * 255));
+      }
+
+      function rgb2hsv(r, g, b) {
+        r /= 255; g /= 255; b /= 255;
+        const max = Math.max(r, g, b), d = max - Math.min(r, g, b);
+        let h = 0;
+        if (d) {
+          if (max === r) h = ((g - b) / d + 6) % 6;
+          else if (max === g) h = (b - r) / d + 2;
+          else h = (r - g) / d + 4;
+          h *= 60;
+        }
+        return { h, s: max ? d / max : 0, v: max };
+      }
+
+      const toHex = rgb => '#' + rgb.map(x => x.toString(16).padStart(2, '0')).join('');
+
+      function parseHex(text) {
+        let m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(text.trim());
+        if (!m) return null;
+        let h = m[1];
+        if (h.length === 3) h = [...h].map(c => c + c).join('');
+        return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+      }
+
+      function drawWheel() {
+        if (wheelV !== state.v) {
+          wheel = ctx.createImageData(W, W);
+          for (let y = 0; y < W; y++) {
+            for (let x = 0; x < W; x++) {
+              const dx = x + 0.5 - R, dy = y + 0.5 - R, d = Math.hypot(dx, dy);
+              if (d > R) continue;
+              const hue = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+              const [r, g, b] = hsv2rgb(hue, Math.min(d / R, 1), state.v);
+              const i = (y * W + x) * 4;
+              wheel.data[i] = r; wheel.data[i + 1] = g; wheel.data[i + 2] = b;
+              wheel.data[i + 3] = 255 * Math.min(Math.max(R - d, 0), 1);   // smooth rim
+            }
+          }
+          wheelV = state.v;
+        }
+        ctx.clearRect(0, 0, W, W);
+        ctx.putImageData(wheel, 0, 0);
+        const a = state.h * Math.PI / 180, r = state.s * R;
+        const mx = R + Math.cos(a) * r, my = R + Math.sin(a) * r;
+        ctx.lineWidth = 2 * dpr;
+        ctx.strokeStyle = '#fff';
+        ctx.beginPath(); ctx.arc(mx, my, 6 * dpr, 0, 7); ctx.stroke();
+        ctx.lineWidth = 1 * dpr;
+        ctx.strokeStyle = 'rgba(0,0,0,.55)';
+        ctx.beginPath(); ctx.arc(mx, my, 7.5 * dpr, 0, 7); ctx.stroke();
+      }
+
+      function refresh(writeHex = true) {
+        const hex = toHex(hsv2rgb(state.h, state.s, state.v));
+        drawWheel();
+        slider.value = Math.round(state.v * 100);
+        swatch.style.background = hex;
+        if (writeHex) hexIn.value = hex;
+        if (target) target.onChange(hex);
+      }
+
+      function setHex(hex) {
+        const rgb = parseHex(hex);
+        if (!rgb) return false;
+        Object.assign(state, rgb2hsv(...rgb));
+        return true;
+      }
+
+      function pickFromWheel(e) {
+        const b = canvas.getBoundingClientRect();
+        const nx = (e.clientX - b.left) / b.width * 2 - 1;
+        const ny = (e.clientY - b.top) / b.height * 2 - 1;
+        state.h = (Math.atan2(ny, nx) * 180 / Math.PI + 360) % 360;
+        state.s = Math.min(Math.hypot(nx, ny), 1);
+        refresh();
+      }
+
+      function el(tag, cls, text) {
+        const e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text) e.textContent = text;
+        return e;
+      }
+
+      function build() {
+        pop = el('div', 'cp hidden');
+        pop.setAttribute('role', 'dialog');
+        pop.setAttribute('aria-label', 'Choose a color');
+        pop.tabIndex = -1;
+
+        titleEl = el('div', 'cp-title');
+        canvas = el('canvas');
+        canvas.width = canvas.height = W;
+        canvas.setAttribute('aria-label', 'Color wheel');
+        ctx = canvas.getContext('2d');
+
+        slider = el('input');
+        slider.type = 'range'; slider.min = 0; slider.max = 100;
+        slider.setAttribute('aria-label', 'Brightness');
+
+        const row = el('div', 'cp-row');
+        swatch = el('span', 'cp-swatch');
+        hexIn = el('input', 'cp-hex');
+        hexIn.type = 'text'; hexIn.maxLength = 7; hexIn.spellcheck = false;
+        hexIn.autocomplete = 'off';
+        hexIn.setAttribute('aria-label', 'Hex color');
+        row.append(swatch, hexIn);
+
+        const presets = el('div', 'cp-presets');
+        PRESETS.forEach(c => {
+          const b = el('button', 'cp-preset');
+          b.type = 'button'; b.style.background = c; b.title = c; b.setAttribute('aria-label', c);
+          b.addEventListener('click', () => { setHex(c); refresh(); });
+          presets.appendChild(b);
+        });
+
+        const actions = el('div', 'cp-actions');
+        const reset = el('button', 'btn btn-outline', 'Reset');
+        reset.type = 'button';
+        const done = el('button', 'btn btn-primary', 'Done');
+        done.type = 'button';
+        actions.append(reset, done);
+
+        pop.append(titleEl, canvas, slider, row, presets, actions);
+        document.body.appendChild(pop);
+
+        let dragging = false;
+        canvas.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          dragging = true;
+          canvas.setPointerCapture(e.pointerId);
+          pickFromWheel(e);
+        });
+        canvas.addEventListener('pointermove', e => { if (dragging) pickFromWheel(e); });
+        const stop = e => {
+          dragging = false;
+          if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+        };
+        canvas.addEventListener('pointerup', stop);
+        canvas.addEventListener('pointercancel', stop);
+
+        slider.addEventListener('input', () => { state.v = slider.value / 100; refresh(); });
+        hexIn.addEventListener('input', () => { if (setHex(hexIn.value)) refresh(false); });
+        hexIn.addEventListener('change', () => refresh());          // tidy the field after typing
+        hexIn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); close(); } });
+        reset.addEventListener('click', () => { setHex(target.original); refresh(); });
+        done.addEventListener('click', close);
+
+        document.addEventListener('pointerdown', e => {
+          if (!pop.classList.contains('hidden') && !pop.contains(e.target)) close();
+        }, true);
+        document.addEventListener('keydown', e => {
+          if (e.key === 'Escape' && !pop.classList.contains('hidden')) close();
+        });
+        window.addEventListener('scroll', () => close(), { passive: true });
+        window.addEventListener('resize', () => close());
+      }
+
+      function close() {
+        if (pop && !pop.classList.contains('hidden')) {
+          pop.classList.add('hidden');
+          target = null;
+        }
+      }
+
+      // opts: { name, color, anchor (DOMRect), onChange(hex) }
+      function open(opts) {
+        if (!pop) build();
+        target = null;                                   // no onChange while loading the state
+        titleEl.textContent = opts.name ? `Color: ${opts.name}` : 'Color';
+        setHex(opts.color) || setHex('#808080');
+        pop.classList.remove('hidden');
+        target = { onChange: opts.onChange, original: opts.color };
+        drawWheel();
+        slider.value = Math.round(state.v * 100);
+        swatch.style.background = toHex(hsv2rgb(state.h, state.s, state.v));
+        hexIn.value = toHex(hsv2rgb(state.h, state.s, state.v));
+
+        const a = opts.anchor, pw = pop.offsetWidth, ph = pop.offsetHeight, m = 8;
+        let x = a.right + 12;
+        if (x + pw > innerWidth - m) x = a.left - pw - 12;
+        x = Math.min(Math.max(x, m), Math.max(m, innerWidth - pw - m));
+        const y = Math.min(Math.max(a.top + a.height / 2 - ph / 2, m), Math.max(m, innerHeight - ph - m));
+        pop.style.left = x + 'px';
+        pop.style.top = y + 'px';
+        pop.focus({ preventScroll: true });
+      }
+
+      return { open, close };
+    })();
+
+    function skSvgEl() {
+      return document.querySelector('#skStage svg');
+    }
+
+    function skSerialize() {
+      return new XMLSerializer().serializeToString(skSvgEl());
+    }
+
+    // Make nodes draggable. Ribbons are recomputed from the nodes' current positions.
+    function skEnableDrag(svg) {
+      const NODE_W = 16, GAP = 4;
+      const vb = svg.viewBox.baseVal;
+
+      const nodes = [];
+      svg.querySelectorAll('.sk-node').forEach(el => {
+        nodes[+el.dataset.i] = {
+          el, x: +el.dataset.x, y: +el.dataset.y, h: +el.dataset.h, dx: 0, dy: 0,
+          name: el.dataset.n || '', color: el.getAttribute('fill'),
+          label: svg.querySelector(`.sk-lbl[data-i="${el.dataset.i}"]`),
+          ins: [], outs: [],
+        };
+      });
+      const links = [];
+      svg.querySelectorAll('.sk-link').forEach(el => {
+        const l = {
+          el, s: nodes[+el.dataset.s], t: nodes[+el.dataset.t], follow: el.dataset.f,
+          y0: +el.dataset.y0, y1: +el.dataset.y1, w: +el.dataset.w,
+        };
+        l.s.outs.push(l);
+        l.t.ins.push(l);
+        links.push(l);
+      });
+
+      // Recolour a node and every ribbon that takes its colour (category ribbons follow
+      // their source node; all other ribbons follow the node they flow into).
+      function recolor(n, color) {
+        n.el.setAttribute('fill', color);
+        links.forEach(l => {
+          if ((l.follow === 's' && l.s === n) || (l.follow === 't' && l.t === n)) {
+            l.el.setAttribute('fill', color);
+          }
+        });
+      }
+
+      function ribbon(l) {
+        const x0 = l.s.x + l.s.dx + NODE_W;
+        const x1 = l.t.x + l.t.dx;
+        const xm = (x0 + x1) / 2;
+        const y0 = l.y0 + l.s.dy, y1 = l.y1 + l.t.dy, w = l.w;
+        return `M${x0},${y0} C${xm},${y0} ${xm},${y1} ${x1},${y1} ` +
+               `L${x1},${y1 + w} C${xm},${y1 + w} ${xm},${y0 + w} ${x0},${y0 + w} Z`;
+      }
+
+      function redraw(n) {
+        n.el.setAttribute('x', n.x + n.dx);
+        n.el.setAttribute('y', n.y + n.dy);
+        if (n.label) n.label.setAttribute('transform', `translate(${n.dx} ${n.dy})`);
+        n.ins.concat(n.outs).forEach(l => l.el.setAttribute('d', ribbon(l)));
+      }
+
+      const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+      const pt = svg.createSVGPoint();
+      function toSvg(e) {
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        return pt.matrixTransform(svg.getScreenCTM().inverse());
+      }
+
+      nodes.forEach(n => {
+        let start = null;
+
+        n.el.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          n.el.setPointerCapture(e.pointerId);
+          n.el.style.cursor = 'grabbing';
+          const p = toSvg(e);
+          start = { px: p.x, py: p.y, dx: n.dx, dy: n.dy, moved: false };
+        });
+
+        n.el.addEventListener('pointermove', e => {
+          if (!start) return;
+          const p = toSvg(e);
+          // A small wobble is still a click; only a real drag moves the node.
+          if (!start.moved && Math.hypot(p.x - start.px, p.y - start.py) < 4) return;
+          start.moved = true;
+          // Vertical: stay inside the chart. Horizontal: stay between source and target columns.
+          const y = clamp(n.y + start.dy + (p.y - start.py), 0, vb.height - n.h);
+          const lo = n.ins.reduce((m, l) => Math.max(m, l.s.x + l.s.dx + NODE_W + GAP), 0);
+          const hi = n.outs.reduce((m, l) => Math.min(m, l.t.x + l.t.dx - NODE_W - GAP), vb.width - NODE_W);
+          const x = clamp(n.x + start.dx + (p.x - start.px), lo, hi);
+          n.dx = x - n.x;
+          n.dy = y - n.y;
+          redraw(n);
+        });
+
+        const end = e => {
+          if (!start) return;
+          const clicked = e.type === 'pointerup' && !start.moved;
+          start = null;
+          n.el.style.cursor = 'grab';
+          if (n.el.hasPointerCapture(e.pointerId)) n.el.releasePointerCapture(e.pointerId);
+          if (clicked) {
+            CP.open({
+              name: n.name,
+              color: n.el.getAttribute('fill'),
+              anchor: n.el.getBoundingClientRect(),
+              onChange: c => recolor(n, c),
+            });
+          }
+        };
+        n.el.addEventListener('pointerup', end);
+        n.el.addEventListener('pointercancel', end);
+      });
+    }
+
+    function skMount(svgText) {
+      const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+      const root = doc.documentElement;
+      if (root.nodeName !== 'svg' || doc.querySelector('parsererror')) {
+        throw new Error('The server returned an invalid diagram.');
+      }
+      const stage = document.getElementById('skStage');
+      CP.close();
+      stage.replaceChildren(document.importNode(root, true));
+      skEnableDrag(skSvgEl());
+    }
+
+    function skError(msg) {
+      const box = document.getElementById('skError');
+      box.textContent = msg ? '⚠ ' + msg : '';
+      box.classList.toggle('hidden', !msg);
+    }
+
+    function skBusy(on) {
+      const btn = document.getElementById('skBtn');
+      btn.disabled = on;
+      btn.querySelector('.btn-spinner').classList.toggle('hidden', !on);
+      btn.querySelector('.btn-text').textContent = on ? 'Building…' : 'Generate';
+      document.getElementById('skLoading').classList.toggle('hidden', !on);
+    }
+
+    function skSave(href, filename) {
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    document.getElementById('sankeyForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      skError('');
+
+      const ticker = await resolveTicker(document.getElementById('skTicker'));
+      const year   = parseInt(document.getElementById('skYear').value, 10);
+      const period = document.getElementById('skPeriod').value;
+      const mode   = document.getElementById('skMode').value;
+      const cats   = document.getElementById('skCats').checked;
+      if (!ticker) { skError('Please enter a ticker symbol.'); return; }
+      if (isNaN(year)) { skError('Please enter a valid fiscal year.'); return; }
+
+      if (skAbort) skAbort.abort();
+      skAbort = new AbortController();
+      document.getElementById('skOut').classList.add('hidden');
+      skBusy(true);
+
+      try {
+        const url = `/api/sankey?ticker=${encodeURIComponent(ticker)}&year=${year}` +
+                    `&period=${period}&mode=${mode}&categories=${cats}`;
+        const resp = await fetch(url, { signal: skAbort.signal });
+        if (!resp.ok) {
+          let detail = `HTTP ${resp.status} — unexpected error.`;
+          try { detail = (await resp.json()).detail ?? detail; } catch (_) { /* non-JSON error body */ }
+          skError(detail);
+          return;
+        }
+        skMount(await resp.text());
+        skName = `${ticker}_${mode}_${year}_${period}`;
+        document.getElementById('skOut').classList.remove('hidden');
+      } catch (err) {
+        if (err.name !== 'AbortError') skError(err.message.startsWith('The server') ? err.message : 'Network error: ' + err.message);
+      } finally {
+        skBusy(false);
+      }
+    });
+
+    document.getElementById('skSvg').addEventListener('click', () => {
+      if (!skSvgEl()) return;
+      const u = URL.createObjectURL(new Blob([skSerialize()], { type: 'image/svg+xml;charset=utf-8' }));
+      skSave(u, skName + '.svg');
+      setTimeout(() => URL.revokeObjectURL(u), 1000);
+    });
+
+    document.getElementById('skPng').addEventListener('click', () => {
+      if (!skSvgEl()) return;
+      const svgUrl = URL.createObjectURL(new Blob([skSerialize()], { type: 'image/svg+xml;charset=utf-8' }));
+      const img = new Image();
+      img.onload = () => {
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width  = img.naturalWidth  * scale;
+        canvas.height = img.naturalHeight * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(svgUrl);
+        canvas.toBlob(b => {
+          const u = URL.createObjectURL(b);
+          skSave(u, skName + '.png');
+          setTimeout(() => URL.revokeObjectURL(u), 1000);
+        }, 'image/png');
+      };
+      img.onerror = () => { URL.revokeObjectURL(svgUrl); skError('Could not create the PNG.'); };
+      img.src = svgUrl;
+    });
+
+    // ── Ticker suggestions ──────────────────────────────────────────────────────────────────
+    const tkCache = new Map();
+
+    async function tkSearch(text, signal) {
+      const q = text.trim().slice(0, 40);
+      const key = q.toLowerCase();
+      if (tkCache.has(key)) return tkCache.get(key);
+      const resp = await fetch(`/api/tickers?q=${encodeURIComponent(q)}&limit=8`, { signal });
+      if (!resp.ok) throw new Error('Ticker search failed');
+      const results = (await resp.json()).results;
+      if (tkCache.size > 300) tkCache.clear();
+      tkCache.set(key, results);
+      return results;
+    }
+
+    // Append text with the part matching the query emphasised (text nodes only, no HTML).
+    function tkMark(parent, text, q) {
+      const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+      if (i < 0) { parent.append(text); return; }
+      const m = document.createElement('mark');
+      m.textContent = text.slice(i, i + q.length);
+      parent.append(text.slice(0, i), m, text.slice(i + q.length));
+    }
+
+    // Turn whatever was typed ("tesla", "msft", "brk.b") into a ticker symbol.
+    async function resolveTicker(input) {
+      const raw = input.value.trim();
+      if (!raw) return '';
+      const typed = raw.toUpperCase();
+      try {
+        const results = await tkSearch(raw);
+        const norm = typed.replace('.', '-');
+        if (results.length && !results.some(r => r.ticker === norm)) {
+          input.value = results[0].ticker;
+          return results[0].ticker;
+        }
+      } catch (_) { /* fall back to what was typed */ }
+      return typed;
+    }
+
+    function attachTickerSuggest(input) {
+      const list = document.createElement('ul');
+      list.id = input.id + 'List';
+      list.className = 'suggest-list hidden';
+      list.setAttribute('role', 'listbox');
+      input.parentElement.appendChild(list);
+      input.setAttribute('role', 'combobox');
+      input.setAttribute('aria-autocomplete', 'list');
+      input.setAttribute('aria-controls', list.id);
+      input.setAttribute('aria-expanded', 'false');
+
+      let items = [], active = -1, timer = null, ctrl = null;
+      const isOpen = () => !list.classList.contains('hidden');
+      const currentQuery = () => input.value.trim().slice(0, 40);
+
+      function close() {
+        clearTimeout(timer);
+        if (ctrl) ctrl.abort();
+        list.classList.add('hidden');
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        active = -1;
+      }
+
+      function setActive(i) {
+        active = i;
+        [...list.children].forEach((li, k) => {
+          li.classList.toggle('active', k === i);
+          li.setAttribute('aria-selected', String(k === i));
+        });
+        if (i >= 0) {
+          input.setAttribute('aria-activedescendant', list.children[i].id);
+          list.children[i].scrollIntoView({ block: 'nearest' });
+        } else {
+          input.removeAttribute('aria-activedescendant');
+        }
+      }
+
+      function choose(i) {
+        const r = items[i];
+        if (!r) return;
+        input.value = r.ticker;
+        close();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+
+      function render(results, q) {
+        items = results;
+        list.replaceChildren();
+        if (!results.length) {
+          const li = document.createElement('li');
+          li.className = 'suggest-empty';
+          li.textContent = `No US-listed company matches “${q}”`;
+          list.appendChild(li);
+        }
+        results.forEach((r, i) => {
+          const li = document.createElement('li');
+          li.id = `${input.id}Opt${i}`;
+          li.className = 'suggest-item';
+          li.setAttribute('role', 'option');
+          const tk = document.createElement('span');
+          tk.className = 'suggest-tk';
+          tkMark(tk, r.ticker, q);
+          const nm = document.createElement('span');
+          nm.className = 'suggest-nm';
+          tkMark(nm, r.name, q);
+          li.append(tk, nm);
+          li.addEventListener('mousedown', e => { e.preventDefault(); choose(i); });
+          li.addEventListener('mousemove', () => { if (active !== i) setActive(i); });
+          list.appendChild(li);
+        });
+        list.classList.remove('hidden');
+        input.setAttribute('aria-expanded', 'true');
+        setActive(results.length ? 0 : -1);
+      }
+
+      function suggest() {
+        clearTimeout(timer);
+        const q = currentQuery();
+        if (!q) { close(); return; }
+        timer = setTimeout(async () => {
+          if (ctrl) ctrl.abort();
+          ctrl = new AbortController();
+          try {
+            const results = await tkSearch(q, ctrl.signal);
+            if (currentQuery() === q && document.activeElement === input) render(results, q);
+          } catch (err) {
+            if (err.name !== 'AbortError') close();
+          }
+        }, 120);
+      }
+
+      input.addEventListener('input', suggest);
+      input.addEventListener('blur', close);
+      input.addEventListener('keydown', e => {
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            if (!isOpen()) suggest();
+            else if (items.length) setActive((active + 1) % items.length);
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (isOpen() && items.length) setActive((active - 1 + items.length) % items.length);
+            break;
+          case 'Enter':
+            if (isOpen() && items[active]) {
+              const exact = items[active].ticker === input.value.trim().toUpperCase().replace('.', '-');
+              if (exact) { close(); break; }          // already a ticker: let the form submit
+              e.preventDefault();
+              choose(active);
+            }
+            break;
+          case 'Escape':
+            if (isOpen()) { e.preventDefault(); close(); }
+            break;
+          case 'Tab':
+            close();
+            break;
+        }
+      });
+    }
+
+    attachTickerSuggest(document.getElementById('ticker'));
+    attachTickerSuggest(document.getElementById('skTicker'));
+
+    // Sankey defaults: the previous calendar quarter. In Q1 that is Q4 of last year.
+    function skDefaults(now) {
+      const q = Math.floor(now.getMonth() / 3) + 1;
+      return {
+        year: q === 1 ? now.getFullYear() - 1 : now.getFullYear(),
+        period: 'Q' + (q === 1 ? 4 : q - 1),
+      };
+    }
+    (() => {
+      const d = skDefaults(new Date());
+      document.getElementById('skYear').value = d.year;
+      document.getElementById('skPeriod').value = d.period;
+    })();
+
+    // Revenue categories only apply to the income statement chart.
+    document.getElementById('skMode').addEventListener('change', e => {
+      const on = e.target.value === 'income';
+      document.getElementById('skCats').disabled = !on;
+      document.getElementById('skCatWrap').classList.toggle('disabled', !on);
+    });
+
+    // Pre-fill the Sankey ticker from the main search box.
+    document.getElementById('ticker').addEventListener('change', e => {
+      const sk = document.getElementById('skTicker');
+      if (!sk.value.trim()) sk.value = e.target.value.trim().toUpperCase();
+    });
+  </script>
+
+</body>
+</html>
