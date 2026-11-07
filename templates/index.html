@@ -164,6 +164,27 @@
     }
     .summary-value { font-size: .92rem; font-weight: 600; word-break: break-word; }
 
+    /* ── Revenue chart ── */
+    .revenue-chart-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .revenue-chart { display: block; height: 300px; }
+    .revenue-chart text { font-family: inherit; fill: var(--gray-600); font-size: 12px; }
+    .revenue-chart .chart-grid { stroke: var(--gray-200); stroke-dasharray: 3 4; }
+    .revenue-chart .chart-bar { fill: var(--blue); }
+    .revenue-chart .chart-bar:hover { fill: var(--blue-dark); }
+    .revenue-chart .profit-bar { fill: #16a34a; }
+    .revenue-chart .profit-bar:hover { fill: #15803d; }
+    .revenue-chart .profit-bar.negative { fill: #dc2626; }
+    .revenue-chart .profit-bar.negative:hover { fill: #b91c1c; }
+    .revenue-chart .chart-value { fill: var(--gray-900); font-size: 11px; font-weight: 600; }
+    .revenue-chart .chart-value.negative { fill: #dc2626; }
+    .revenue-chart .chart-margin { fill: #7c3aed; font-size: 11px; font-weight: 700; }
+    .chart-legend { display: flex; gap: 1rem; margin: -.35rem 0 .6rem; font-size: .8rem; color: var(--gray-600); }
+    .chart-legend-item { display: inline-flex; align-items: center; gap: .4rem; }
+    .chart-legend-swatch { width: .7rem; height: .7rem; border-radius: 2px; background: var(--blue); }
+    .chart-legend-swatch.profit { background: #16a34a; }
+    .chart-legend-swatch.margin { background: #7c3aed; }
+    .revenue-chart-empty { color: var(--gray-400); font-size: .875rem; padding: 2rem 0; text-align: center; }
+
     /* ── Results header ── */
     .results-header {
       display: flex;
@@ -215,6 +236,8 @@
     .td-seg-cons { font-weight: 700; }
     .td-seg-part { color: var(--gray-600); }
     .td-value { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; font-size: .875rem; }
+    .td-profit { color: #15803d; }
+    .td-profit.negative { color: #dc2626; }
     .align-right { text-align: right !important; }
 
     .form-badge {
@@ -374,6 +397,93 @@
       </form>
     </div>
 
+    <!-- Error -->
+    <div id="errorBox" class="error-box hidden" role="alert"></div>
+
+    <!-- Page-level loading -->
+    <div id="loading" class="loading hidden" aria-live="polite">
+      <div class="page-spinner"></div>
+      <p>Fetching from SEC EDGAR…</p>
+      <p class="sub">This may take several seconds on first lookup</p>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="hidden">
+
+      <!-- Summary card -->
+      <div class="card hidden" aria-hidden="true">
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span class="summary-label">Company</span>
+            <span class="summary-value" id="sCompany">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Ticker</span>
+            <span class="summary-value" id="sTicker">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">CIK</span>
+            <span class="summary-value" id="sCIK">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Revenue Concept</span>
+            <span class="summary-value" id="sConcept">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Segments</span>
+            <span class="summary-value" id="sSegments">—</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Records</span>
+            <span class="summary-value" id="sRows">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Revenue bar chart -->
+      <div class="card">
+        <h2 class="card-title">Annual revenue and profit</h2>
+        <p class="card-sub">Profit is net income after expenses and taxes. Hover over a bar for the reported amount.</p>
+        <div class="chart-legend" aria-label="Chart legend">
+          <span class="chart-legend-item"><span class="chart-legend-swatch"></span>Revenue</span>
+          <span class="chart-legend-item"><span class="chart-legend-swatch profit"></span>Profit</span>
+          <span class="chart-legend-item"><span class="chart-legend-swatch margin"></span>Profit margin</span>
+        </div>
+        <div id="revenueChartWrap" class="revenue-chart-wrap">
+          <div id="revenueChartEmpty" class="revenue-chart-empty hidden">No consolidated revenue data available to chart.</div>
+          <svg id="revenueChart" class="revenue-chart" role="img" aria-label="Annual revenue and net income by fiscal year"></svg>
+        </div>
+      </div>
+
+      <!-- Data table card -->
+      <div class="card">
+        <div class="results-header">
+          <h2>Annual Revenue and Profit</h2>
+          <div class="results-actions">
+            <div class="seg-pills" id="segPills"></div>
+            <button id="downloadBtn" type="button" class="btn btn-outline">↓ Download CSV</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Segment</th>
+                <th>Fiscal Year</th>
+                <th>Period End</th>
+                <th class="align-right">Revenue</th>
+                <th class="align-right">Profit</th>
+                <th>Form</th>
+                <th>Filed</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /results -->
+
     <!-- Sankey -->
     <div class="card">
       <h2 class="card-title">Sankey diagram</h2>
@@ -402,7 +512,7 @@
             <input
               type="number" id="skYear"
               min="1993" max="{{ current_year }}"
-              value="{{ current_year }}" required
+              value="{{ current_year - 1 }}" required
             />
           </div>
 
@@ -446,77 +556,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Error -->
-    <div id="errorBox" class="error-box hidden" role="alert"></div>
-
-    <!-- Page-level loading -->
-    <div id="loading" class="loading hidden" aria-live="polite">
-      <div class="page-spinner"></div>
-      <p>Fetching from SEC EDGAR…</p>
-      <p class="sub">This may take several seconds on first lookup</p>
-    </div>
-
-    <!-- Results -->
-    <div id="results" class="hidden">
-
-      <!-- Summary card -->
-      <div class="card">
-        <div class="summary-grid">
-          <div class="summary-item">
-            <span class="summary-label">Company</span>
-            <span class="summary-value" id="sCompany">—</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Ticker</span>
-            <span class="summary-value" id="sTicker">—</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">CIK</span>
-            <span class="summary-value" id="sCIK">—</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Revenue Concept</span>
-            <span class="summary-value" id="sConcept">—</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Segments</span>
-            <span class="summary-value" id="sSegments">—</span>
-          </div>
-          <div class="summary-item">
-            <span class="summary-label">Records</span>
-            <span class="summary-value" id="sRows">—</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Data table card -->
-      <div class="card">
-        <div class="results-header">
-          <h2>Annual Revenue</h2>
-          <div class="results-actions">
-            <div class="seg-pills" id="segPills"></div>
-            <button id="downloadBtn" type="button" class="btn btn-outline">↓ Download CSV</button>
-          </div>
-        </div>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Segment</th>
-                <th>Fiscal Year</th>
-                <th>Period End</th>
-                <th class="align-right">Revenue</th>
-                <th>Form</th>
-                <th>Filed</th>
-              </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-    </div><!-- /results -->
 
   </main>
 
@@ -606,7 +645,7 @@
 
       if (!rows.length) {
         tbody.innerHTML =
-          '<tr><td colspan="6" class="td-empty">No records for this filter.</td></tr>';
+          '<tr><td colspan="7" class="td-empty">No records for this filter.</td></tr>';
         return;
       }
 
@@ -618,9 +657,121 @@
           `<td>${esc(r.fiscal_year)}</td>` +
           `<td>${r.period_end ? String(r.period_end).slice(0, 10) : '—'}</td>` +
           `<td class="td-value">${fmtRevenue(r.value)}</td>` +
+          `<td class="td-value td-profit${Number(r.profit) < 0 ? ' negative' : ''}">${r.profit == null ? '—' : fmtRevenue(r.profit)}</td>` +
           `<td><span class="form-badge">${esc(r.form)}</span></td>` +
           `<td>${esc(r.filed)}</td>`;
         tbody.appendChild(tr);
+      });
+    }
+
+    // ── Consolidated revenue chart ─────────────────────────────────────────────
+    function renderRevenueChart(rows) {
+      const svg = document.getElementById('revenueChart');
+      const empty = document.getElementById('revenueChartEmpty');
+      const ns = 'http://www.w3.org/2000/svg';
+      const yearly = new Map();
+      rows.filter(r => r.segment === 'Consolidated')
+        .sort((a, b) => Number(a.fiscal_year) - Number(b.fiscal_year))
+        .forEach(r => {
+          const year = Number(r.fiscal_year);
+          if (!yearly.has(year)) {
+            const revenue = Number(r.value);
+            const profit = r.profit == null ? NaN : Number(r.profit);
+            yearly.set(year, {
+              revenue,
+              profit,
+              margin: Number.isFinite(profit) && revenue !== 0 ? profit / revenue * 100 : null,
+            });
+          }
+        });
+      const data = [...yearly.entries()].filter(([, values]) => Number.isFinite(values.revenue));
+      svg.replaceChildren();
+
+      if (!data.length) {
+        svg.classList.add('hidden');
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      svg.classList.remove('hidden');
+      empty.classList.add('hidden');
+      const width = Math.max(900, 120 + data.length * 130);
+      const height = 300;
+      const left = 72, right = 24, top = 34, bottom = 48;
+      const plotWidth = width - left - right;
+      const plotHeight = height - top - bottom;
+      const maxValue = Math.max(...data.flatMap(([, values]) => [values.revenue, values.profit]).filter(Number.isFinite), 1);
+      const minValue = Math.min(0, ...data.map(([, values]) => Number.isFinite(values.profit) ? values.profit : 0));
+      const unit = maxValue >= 1e12 ? 1e12 : 1e9;
+      const unitLabel = unit === 1e12 ? 'USD ($T)' : 'USD ($B)';
+      const rawMax = maxValue / unit;
+      const rawMin = minValue / unit;
+      const roughStep = (rawMax - rawMin) / 4;
+      const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+      const fraction = roughStep / magnitude;
+      const tickStep = (fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10) * magnitude;
+      const axisMax = Math.ceil(rawMax / tickStep) * tickStep;
+      const axisMin = Math.floor(rawMin / tickStep) * tickStep;
+      const axisRange = axisMax - axisMin;
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      svg.setAttribute('width', width);
+      svg.setAttribute('aria-label', `Consolidated annual revenue by fiscal year, shown in ${unit === 1e12 ? 'trillions' : 'billions'} of dollars`);
+
+      const add = (tag, attrs, text) => {
+        const el = document.createElementNS(ns, tag);
+        Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+        if (text !== undefined) el.textContent = text;
+        svg.appendChild(el);
+        return el;
+      };
+
+      add('text', { x: 8, y: 10 }, unitLabel);
+      for (let value = axisMin; value <= axisMax + tickStep * 1e-9; value += tickStep) {
+        const y = top + plotHeight * (1 - (value - axisMin) / axisRange);
+        add('line', { x1: left, y1: y, x2: width - right, y2: y, class: 'chart-grid' });
+        add('text', { x: left - 10, y: y + 4, 'text-anchor': 'end' }, Number(value.toPrecision(6)).toString());
+      }
+
+      const slot = plotWidth / data.length;
+      const barWidth = Math.min(28, slot * .24);
+      const zeroY = top + plotHeight * (1 - (0 - axisMin) / axisRange);
+      data.forEach(([year, values], index) => {
+        const center = left + index * slot + slot / 2;
+        [[values.revenue, 'chart-bar', -1], [values.profit, 'profit-bar', 1]].forEach(([value, className, side]) => {
+          if (!Number.isFinite(value)) return;
+          const scaled = value / unit;
+          const valueY = top + plotHeight * (1 - (scaled - axisMin) / axisRange);
+          const isNegativeProfit = className === 'profit-bar' && value < 0;
+          const bar = add('rect', {
+            x: center + side * barWidth / 2 - barWidth / 2,
+            y: Math.min(zeroY, valueY),
+            width: barWidth,
+            height: Math.max(1, Math.abs(zeroY - valueY)),
+            rx: 3,
+            class: className + (isNegativeProfit ? ' negative' : ''),
+          });
+          const title = document.createElementNS(ns, 'title');
+          title.textContent = `FY${year} ${className === 'chart-bar' ? 'revenue' : 'profit'}: ${fmtRevenue(value)}`;
+          bar.appendChild(title);
+          const valueLabelY = value >= 0
+            ? Math.max(top + 18, valueY - 7)
+            : Math.min(top + plotHeight - 4, valueY + 15);
+          add('text', {
+            x: center + side * barWidth / 2,
+            y: valueLabelY,
+            'text-anchor': side < 0 ? 'end' : 'start',
+            class: 'chart-value' + (isNegativeProfit ? ' negative' : ''),
+          }, fmtRevenue(value));
+          if (className === 'profit-bar' && Number.isFinite(values.margin)) {
+            add('text', {
+              x: center + barWidth / 2,
+              y: Math.max(top + 2, valueLabelY - 15),
+              'text-anchor': 'start',
+              class: 'chart-margin',
+            }, `${values.margin.toFixed(1)}%`);
+          }
+        });
+        add('text', { x: center, y: height - 18, 'text-anchor': 'middle' }, String(year));
       });
     }
 
@@ -640,6 +791,7 @@
       activeSeg = 'All';
       renderPills(allRows);
       renderTable();
+      renderRevenueChart(allRows);
       document.getElementById('results').classList.remove('hidden');
     }
 

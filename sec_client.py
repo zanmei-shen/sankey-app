@@ -29,7 +29,9 @@ REVENUE_CONCEPTS: list[str] = [
     "SalesRevenueNet",
     "RevenueFromContractWithCustomerIncludingAssessedTax",
     "NetSales",
+    "RevenuesNetOfInterestExpense",
 ]
+PROFIT_CONCEPTS: list[str] = ["NetIncomeLoss", "ProfitLoss"]
 
 # ── Segment keyword mapping ────────────────────────────────────────────────────
 # (concept_substring_lower, display_name) — both a segment keyword AND a
@@ -59,7 +61,7 @@ REQUEST_INTERVAL_S = 0.6    # minimum gap between SEC requests (fair-use)
 OUTPUT_COLUMNS: list[str] = [
     "company", "ticker", "cik", "metric", "segment",
     "period_end", "fiscal_year", "fiscal_period",
-    "value", "unit", "form", "accession", "filed",
+    "value", "profit", "unit", "form", "accession", "filed",
 ]
 
 # ── Module-level state ─────────────────────────────────────────────────────────
@@ -319,22 +321,57 @@ def extract_revenue(
     end_year: int,
 ) -> tuple[list[dict[str, Any]], str]:
     """
-    Try REVENUE_CONCEPTS in priority order; return (rows, concept_used) for
-    the first concept that has data in the requested fiscal year range.
-    Returns ([], '') if no concept yields data.
+    Walk REVENUE_CONCEPTS in priority order, filling each fiscal year from the
+    highest-priority concept that reports it. Issuers sometimes switch tags
+    mid-history (e.g. NVDA: ...ExcludingAssessedTax through FY2022, then
+    Revenues), so a single concept may not cover the whole range.
+    Returns (rows, concepts_used joined by ', '); ([], '') if nothing found.
     """
     us_gaap: dict = facts.get("facts", {}).get("us-gaap", {})
     target_fys = set(range(start_year, end_year + 1))
 
+    by_fy: dict[int, dict[str, Any]] = {}
+    used: list[str] = []
+
     for concept in REVENUE_CONCEPTS:
         units_usd = us_gaap.get(concept, {}).get("units", {}).get("USD", [])
         rows = _annual_rows(units_usd, concept, "Consolidated", ticker, cik_padded, entity_name)
-        rows = [r for r in rows if r["fiscal_year"] in target_fys]
-        if rows:
-            log.info("Revenue concept: %s | %d records", concept, len(rows))
-            return rows, concept
+        added = 0
+        for r in rows:
+            if r["fiscal_year"] in target_fys and r["fiscal_year"] not in by_fy:
+                by_fy[r["fiscal_year"]] = r
+                added += 1
+        if added:
+            log.info("Revenue concept: %s | %d records", concept, added)
+            used.append(concept)
+        if target_fys <= by_fy.keys():
+            break
 
-    return [], ""
+    return [by_fy[fy] for fy in sorted(by_fy)], ", ".join(used)
+
+
+def extract_profit(
+    facts: dict[str, Any],
+    ticker: str,
+    cik_padded: str,
+    entity_name: str,
+    target_fys: set[int],
+) -> dict[int, float]:
+    """Return annual net income by fiscal year, filling gaps from fallback tags."""
+    us_gaap: dict = facts.get("facts", {}).get("us-gaap", {})
+    by_fy: dict[int, float] = {}
+
+    for concept in PROFIT_CONCEPTS:
+        units_usd = us_gaap.get(concept, {}).get("units", {}).get("USD", [])
+        rows = _annual_rows(units_usd, concept, "Consolidated", ticker, cik_padded, entity_name)
+        for row in rows:
+            fy = row["fiscal_year"]
+            if fy in target_fys and fy not in by_fy and row.get("value") is not None:
+                by_fy[fy] = row["value"]
+        if target_fys <= by_fy.keys():
+            break
+
+    return by_fy
 
 
 def extract_segments(
@@ -418,9 +455,17 @@ def fetch_financials(
         )
 
     target_fys = {r["fiscal_year"] for r in consolidated}
+    profit_by_fy = extract_profit(
+        facts, ticker, cik_padded, entity_name, target_fys
+    )
+    for row in consolidated:
+        row["profit"] = profit_by_fy.get(row["fiscal_year"])
+
     segment_rows, found_segments = extract_segments(
         facts, ticker, cik_padded, entity_name, target_fys
     )
+    for row in segment_rows:
+        row["profit"] = None
 
     return {
         "company": entity_name,

@@ -300,6 +300,98 @@ def _opex_items(r: _Reader, opex: float) -> list[tuple[str, float]]:
     return items
 
 
+def _build_financial_statement(
+    ticker: str,
+    name: str,
+    cik: str,
+    w: _Window,
+    r: _Reader,
+    rev: float,
+    categories: bool,
+) -> Sankey:
+    """Build a bank-style income flow when operating income is not reported."""
+    pretax = r.get(*_PRETAX_TAGS)
+    if pretax is None or pretax <= EPS:
+        raise SankeyUnavailable(
+            "This company does not report standard operating income or positive pre-tax income "
+            "for the selected period, so an income-statement chart is unavailable."
+        )
+
+    net = r.get(*_NET_TAGS)
+    tax = r.get("IncomeTaxExpenseBenefit")
+    if tax is None:
+        tax = (pretax - net) if net is not None else 0.0
+    if net is None:
+        net = pretax - tax
+
+    b = _Builder()
+    b.node("Net revenues", 0, C_REV, 0)
+    b.node("Pre-tax income", 1, C_PROFIT, 0)
+    if pretax <= rev:
+        expenses = rev - pretax
+        b.link("Net revenues", "Pre-tax income", pretax)
+        if expenses > EPS:
+            b.node("Expenses & other items", 1, C_COST, 1)
+            b.link("Net revenues", "Expenses & other items", expenses)
+    else:
+        b.link("Net revenues", "Pre-tax income", rev)
+        b.node("Other income", 0, C_GAIN, 1)
+        b.link("Other income", "Pre-tax income", pretax - rev)
+
+    adj = net - (pretax - tax)
+    if abs(adj) < 0.0002 * rev:
+        adj = 0.0
+    tax_out = min(max(tax, 0.0), pretax)
+    adj_out = min(max(-adj, 0.0), pretax - tax_out)
+    net_flow = pretax - tax_out - adj_out
+    tax_in = max(-tax, 0.0)
+    adj_in = max(adj, 0.0)
+
+    if tax_out > EPS:
+        b.node("Income tax", 2, C_COST, 1)
+        b.link("Pre-tax income", "Income tax", tax_out)
+    if adj_out > EPS:
+        b.node("Minority interest & other", 2, C_COST, 2)
+        b.link("Pre-tax income", "Minority interest & other", adj_out)
+    if net_flow + tax_in + adj_in > EPS:
+        b.node("Net income", 2, C_PROFIT, 0)
+        b.link("Pre-tax income", "Net income", net_flow)
+        if tax_in > EPS:
+            b.node("Tax benefit", 1, C_GAIN, 2)
+            b.link("Tax benefit", "Net income", tax_in)
+        if adj_in > EPS:
+            b.node("Other gains", 1, C_GAIN, 3)
+            b.link("Other gains", "Net income", adj_in)
+
+    parts = [f"Net revenues {fmt_money(rev)}", f"Pre-tax income {fmt_money(pretax)}"]
+    if net is not None:
+        parts.append(f"Net income {fmt_money(net)}")
+    parts.append("bank-style income statement (operating income not reported)")
+
+    if categories:
+        try:
+            cats = _revenue_categories(cik, w, rev)
+        except (ValueError, RuntimeError, ET.ParseError) as exc:
+            log.warning("Revenue categories unavailable for %s: %s", ticker.upper(), exc)
+            parts.append("revenue categories not available")
+        else:
+            for node in b.nodes.values():
+                node.col += 1
+            for i, (label, value, color) in enumerate(cats):
+                if label in b.nodes:
+                    label = f"{label} (revenue)"
+                b.node(label, 0, color, i)
+                b.link(label, "Net revenues", value, color)
+
+    return Sankey(
+        title=f"{_display_name(name, ticker)} — Income statement, {w.label}",
+        subtitle="  ·  ".join(parts),
+        nodes=list(b.nodes.values()),
+        links=b.links,
+        base_value=rev,
+    )
+
+
 def build_income_statement(
     ticker: str, year: int, period: str, categories: bool = True
 ) -> Sankey:
@@ -322,10 +414,7 @@ def build_income_statement(
         if costs is not None:
             op = rev - costs
     if op is None:
-        raise SankeyUnavailable(
-            "This company does not report operating income in a standard way "
-            "(common for banks and insurers), so an income-statement chart is not available."
-        )
+        return _build_financial_statement(ticker, name, cik, w, r, rev, categories)
     if gp is not None:
         gp = min(gp, rev)
         if gp < 0 < op:
