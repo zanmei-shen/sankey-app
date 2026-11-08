@@ -12,6 +12,7 @@ import os
 import re
 import threading
 import time
+from datetime import date
 from typing import Any
 
 import requests
@@ -280,15 +281,24 @@ def _annual_rows(
         and f.get("fy") is not None
     ]
 
-    # A filing's `fy` also tags its prior-year comparatives, so prefer the
-    # latest period end, then the latest filing (amendments supersede originals).
-    by_fy: dict[int, dict[str, Any]] = {}
+    # SEC `fy` is the fiscal year of the filing, not necessarily the year of
+    # each comparative fact in that filing. Key facts by their actual period
+    # end so one filing's comparatives don't overwrite earlier annual periods.
+    by_period_end: dict[str, dict[str, Any]] = {}
     for f in annual:
-        fy: int = f["fy"]
-        if fy not in by_fy or (f.get("end", ""), f.get("filed", "")) > (
-            by_fy[fy].get("end", ""), by_fy[fy].get("filed", "")
-        ):
-            by_fy[fy] = f
+        start, end = f.get("start"), f.get("end")
+        if not start or not end:
+            continue
+        try:
+            duration_days = (date.fromisoformat(end) - date.fromisoformat(start)).days
+        except ValueError:
+            continue
+        if not 300 <= duration_days <= 380:
+            continue
+
+        previous = by_period_end.get(end)
+        if previous is None or f.get("filed", "") > previous.get("filed", ""):
+            by_period_end[end] = f
 
     return [
         {
@@ -298,7 +308,7 @@ def _annual_rows(
             "metric": concept,
             "segment": segment,
             "period_end": f.get("end"),
-            "fiscal_year": fy,
+            "fiscal_year": date.fromisoformat(end).year,
             "fiscal_period": f.get("fp"),
             "value": f.get("val"),
             "unit": "USD",
@@ -306,7 +316,7 @@ def _annual_rows(
             "accession": f.get("accn"),
             "filed": f.get("filed"),
         }
-        for fy, f in sorted(by_fy.items())
+        for end, f in sorted(by_period_end.items())
     ]
 
 
